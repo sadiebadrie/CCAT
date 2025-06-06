@@ -2,17 +2,16 @@ import streamlit as st
 import fitz  # PyMuPDF
 import pandas as pd
 from openai import OpenAI
-import os
 
-# Set up the page
+# Set up Streamlit page
 st.set_page_config(page_title="CCAT Auto-Appraiser", layout="wide")
-st.title("📚 Crowe Critical Appraisal Tool (CCAT v1.4)")
-st.markdown("Upload a journal article PDF and automatically generate CCAT v1.4 scores using GPT-4.")
+st.title("📚 CCAT Critical Appraisal Tool (v1.4) Auto-Appraiser")
+st.markdown("Upload a journal article PDF. GPT-4 will analyze it and auto-score each CCAT v1.4 domain.")
 
-# Load API key
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Initialize OpenAI
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Define CCAT categories
+# CCAT domains
 ccat_domains = [
     "Preliminaries",
     "Introduction",
@@ -24,81 +23,80 @@ ccat_domains = [
     "Discussion"
 ]
 
-# Domain-specific instructions based on the CCAT v1.4 guide
 ccat_prompts = {
-    "Preliminaries": "Evaluate whether the title, abstract, and general writing style of the paper meet CCAT standards. Score from 0 to 5.",
-    "Introduction": "Does the introduction summarize current knowledge, state specific problems, and outline clear objectives or hypotheses?",
-    "Design": "Assess the suitability and clarity of the research design, interventions, outcome measures, and bias minimization strategies.",
-    "Sampling": "Was the sampling method well-chosen, described, and justified? Consider inclusion/exclusion criteria and sample size rationale.",
-    "Data Collection": "Evaluate how data was collected, including protocols, instruments, and quality assurance processes.",
-    "Ethical Matters": "Check if ethics approval, informed consent, conflict of interest, and researcher relationships are addressed.",
-    "Results": "Are the data clearly presented, analyzed correctly, and limitations acknowledged? Assess interpretation accuracy and completeness.",
-    "Discussion": "Did the discussion align results with objectives, account for bias, and mention generalizability and study limitations?"
+    "Preliminaries": "Evaluate the title, abstract, and general writing quality. Is it clear, concise, and detailed enough for reproduction?",
+    "Introduction": "Does the introduction summarize current knowledge, identify the research problem, and state the study objectives or hypothesis?",
+    "Design": "Assess the clarity and appropriateness of the research design, including details on interventions, measurements, and bias reduction.",
+    "Sampling": "Was the sampling method suitable, explained, and justified? Were inclusion/exclusion criteria and sample size appropriate?",
+    "Data Collection": "How were data collected? Were protocols clear, instruments reliable, and missing data handled well?",
+    "Ethical Matters": "Did the study discuss ethics approval, informed consent, conflicts of interest, and researcher–participant relationships?",
+    "Results": "Were data clearly presented and analyzed properly? Were limitations and bias acknowledged?",
+    "Discussion": "Did the authors interpret findings appropriately, acknowledge bias and limitations, and assess generalisability?"
 }
 
-# PDF Upload
+# File uploader
 uploaded_file = st.file_uploader("📄 Upload a PDF file", type=["pdf"])
+
 if uploaded_file:
-    # Extract PDF text
+    # Extract text from PDF
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     full_text = "\n".join([page.get_text() for page in doc])
+    st.success("✅ PDF uploaded and text extracted.")
 
-    st.success("✅ PDF text extracted successfully.")
     with st.expander("📖 View Extracted Article Text"):
-        st.text_area("Article Content", value=full_text, height=400)
+        st.text_area("Full Article Text", full_text, height=400)
 
-    # Ask GPT-4 to evaluate each section
+    # Run GPT scoring
     st.header("🤖 AI-Generated CCAT Scores")
     scores = {}
     explanations = {}
 
-    with st.spinner("Generating CCAT scores with GPT-4..."):
+    with st.spinner("Scoring all CCAT sections using GPT-4..."):
         for domain in ccat_domains:
             prompt = (
                 f"You are a research appraiser using the Crowe Critical Appraisal Tool (CCAT) v1.4.\n"
                 f"Based on the full article text below, appraise the '{domain}' domain.\n\n"
                 f"Instructions: {ccat_prompts[domain]}\n\n"
                 f"Text:\n{full_text}\n\n"
-                f"Give:\n1. A score from 0 to 5\n2. A brief explanation (2–3 lines max)\n"
-                f"Format your response like:\nScore: X\nExplanation: ...\n"
+                f"Return in the format:\nScore: X\nExplanation: ..."
             )
-           client = openai.OpenAI()
 
-chat_response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.3
-)
-result = chat_response.choices[0].message.content.strip()
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
+            )
+            result = response.choices[0].message.content.strip()
+
             try:
                 score_line, explanation_line = result.split("\n", 1)
                 score = int(score_line.replace("Score:", "").strip())
                 explanation = explanation_line.replace("Explanation:", "").strip()
             except:
                 score = 0
-                explanation = "Error: Could not parse GPT response."
+                explanation = "⚠️ GPT response formatting issue."
 
             scores[domain] = score
             explanations[domain] = explanation
 
-    # Display results
+    # Show results
     df = pd.DataFrame({
         "Domain": ccat_domains,
         "Score (0–5)": [scores[d] for d in ccat_domains],
         "Explanation": [explanations[d] for d in ccat_domains]
     })
 
-    total_score = sum(scores.values())
-    percent_score = round((total_score / 40) * 100)
+    total = sum(scores.values())
+    percent = round((total / 40) * 100)
 
     st.dataframe(df, use_container_width=True)
-    st.markdown(f"### ✅ Total Score: {total_score} / 40  |  Percent: {percent_score}%")
+    st.markdown(f"### ✅ Total Score: {total}/40  📊 Validity Percentage: {percent}%")
 
-    # Download CSV
+    # Download results
     csv = df.to_csv(index=False)
-    st.download_button("⬇️ Download Appraisal as CSV", data=csv, file_name="ccat_appraisal.csv", mime="text/csv")
+    st.download_button("⬇️ Download Results as CSV", data=csv, file_name="ccat_results.csv", mime="text/csv")
 
-    # Reset option
+    # Re-run option
     st.markdown("---")
-    if st.button("🔁 Upload another article"):
+    if st.button("🔁 Appraise Another Article"):
         st.experimental_rerun()
