@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 # ── 2) DEBUG: Confirm the secret is loaded ─────────────────────────────────
-# (Once confirmed, you can delete these lines.)
+# (You can remove these lines once you see the green “OPENAI key loaded successfully.”)
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("❌ OPENAI_API_KEY not found in secrets.toml!")
     st.stop()
@@ -23,7 +23,7 @@ openai.api_key = st.secrets["OPENAI_API_KEY"]
 # ── 4) PAGE TITLE & DESCRIPTION ─────────────────────────────────────────────
 st.title("📚 CCAT Critical Appraisal Tool (v1.4) Auto-Appraiser")
 st.markdown(
-    "Upload a journal article PDF below. GPT-4 will read it and automatically score each CCAT v1.4 domain."
+    "Upload a journal article PDF below. The app will use **gpt-3.5-turbo** to read it and automatically score each CCAT v1.4 domain."
 )
 
 # ── 5) CCAT DOMAINS & PROMPTS ─────────────────────────────────────────────────
@@ -68,7 +68,7 @@ ccat_prompts = {
     ),
     "Discussion": (
         "Did the authors interpret findings appropriately, acknowledge bias and limitations, "
-        "and assess generalisability?"
+        "and assess generalizability?"
     )
 }
 
@@ -76,7 +76,7 @@ ccat_prompts = {
 uploaded_file = st.file_uploader("📄 Upload a PDF file", type=["pdf"])
 
 if uploaded_file:
-    # Extract full text from the PDF
+    # Extract full text from the uploaded PDF
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     full_text = "\n".join([page.get_text() for page in doc])
     st.success("✅ PDF uploaded and text extracted.")
@@ -85,12 +85,12 @@ if uploaded_file:
     with st.expander("📖 View Extracted Article Text"):
         st.text_area("Full Article Text", value=full_text, height=300)
 
-    # ── 7) AI-GENERATED CCAT SCORING ──────────────────────────────────────────
+    # ── 7) AI-GENERATED CCAT SCORING (using gpt-3.5-turbo) ─────────────────────
     st.header("🤖 AI-Generated CCAT Scores")
     scores = {}
     explanations = {}
 
-    with st.spinner("Scoring all CCAT sections using GPT-4..."):
+    with st.spinner("Scoring all CCAT sections using gpt-3.5-turbo..."):
         for domain in ccat_domains:
             prompt = (
                 f"You are a research appraiser using the Crowe Critical Appraisal Tool (CCAT) v1.4.\n"
@@ -102,15 +102,15 @@ if uploaded_file:
                 f"Explanation: <two-to-three-sentence rationale>"
             )
 
-            # Call OpenAI ChatCompletion (v0.27.0 syntax)
+            # Call OpenAI with gpt-3.5-turbo instead of gpt-4
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3
             )
             result = response.choices[0].message.content.strip()
 
-            # Parse the lines "Score: X" and "Explanation: …"
+            # Parse “Score: X” and “Explanation: …”
             try:
                 score_line, explanation_line = result.split("\n", 1)
                 score = int(score_line.replace("Score:", "").strip())
