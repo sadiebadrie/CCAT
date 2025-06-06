@@ -1,25 +1,16 @@
 import streamlit as st
 import fitz  # PyMuPDF
 import pandas as pd
-import openai
 
-# ── 1) STREAMLIT PAGE CONFIG (MUST BE FIRST) ─────────────────────────────────
-st.set_page_config(
-    page_title="CCAT Auto-Appraiser",
-    layout="wide"
-)
-
-# ── 2) ASSIGN THE KEY ───────────────────────────────────────────────────────────
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-
-# ── 3) PAGE TITLE & DESCRIPTION ───────────────────────────────────────────────
-st.title("📚 CCAT Critical Appraisal Tool (v1.4) Auto-Appraiser")
+# 1) Streamlit configuration
+st.set_page_config(page_title="CCAT Manual Appraiser", layout="wide")
+st.title("📚 CCAT Critical Appraisal Tool (v1.4)")
 st.markdown(
-    "Upload a journal article PDF below. The app will use **gpt-3.5-turbo** "
-    "to read it and automatically score each CCAT v1.4 domain."
+    "Upload a journal article PDF, read it, and manually assign scores (0–5) "
+    "for each of the 8 CCAT domains. Then download your results as a CSV."
 )
 
-# ── 4) CCAT DOMAINS & PROMPTS ───────────────────────────────────────────────────
+# 2) CCAT domains and instructions
 ccat_domains = [
     "Preliminaries",
     "Introduction",
@@ -30,111 +21,52 @@ ccat_domains = [
     "Results",
     "Discussion"
 ]
-
-ccat_prompts = {
-    "Preliminaries": (
-        "Evaluate the title, abstract, and general writing quality. "
-        "Is it clear, concise, and detailed enough?"
-    ),
-    "Introduction": (
-        "Does the introduction summarize current knowledge, identify the research problem, "
-        "and state the study objectives or hypothesis?"
-    ),
-    "Design": (
-        "Assess the clarity and appropriateness of the research design, "
-        "including details on interventions, measurements, and bias reduction."
-    ),
-    "Sampling": (
-        "Was the sampling method suitable, explained, and justified? "
-        "Were inclusion/exclusion criteria and sample size appropriate?"
-    ),
-    "Data Collection": (
-        "How were data collected? Were protocols clear, instruments reliable, "
-        "and missing data handled well?"
-    ),
-    "Ethical Matters": (
-        "Did the study discuss ethics approval, informed consent, conflicts of interest, "
-        "and researcher–participant relationships?"
-    ),
-    "Results": (
-        "Were data clearly presented and analyzed properly? Were limitations and bias acknowledged?"
-    ),
-    "Discussion": (
-        "Did the authors interpret findings appropriately, acknowledge bias and limitations, "
-        "and assess generalizability?"
-    )
+ccat_instructions = {
+    "Preliminaries": "Evaluate title, abstract, and general writing quality: clarity, detail, reproducibility.",
+    "Introduction": "Does the introduction summarize current knowledge, define the problem, and state objectives?",
+    "Design": "Assess appropriateness and clarity of research design, interventions/measures, and bias reduction.",
+    "Sampling": "Was the sampling method suitable and justified? Were criteria and sample size explained?",
+    "Data Collection": "Evaluate protocols, instruments, data handling, missing data, and quality assurance.",
+    "Ethical Matters": "Check ethics approval, informed consent, conflicts of interest, researcher–participant relationships.",
+    "Results": "Are data clearly presented and analyzed? Are limitations and bias acknowledged?",
+    "Discussion": "Did authors interpret findings appropriately, acknowledge bias, limitations, and generalizability?"
 }
 
-# ── 5) PDF UPLOADER ──────────────────────────────────────────────────────────────
+# 3) PDF uploader
 uploaded_file = st.file_uploader("📄 Upload a PDF file", type=["pdf"])
-
 if uploaded_file:
-    # Extract full text from the PDF
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     full_text = "\n".join([page.get_text() for page in doc])
     st.success("✅ PDF uploaded and text extracted.")
-
-    # Optional: Let the user view the extracted text
     with st.expander("📖 View Extracted Article Text"):
-        st.text_area("Full Article Text", value=full_text, height=300)
+        st.text_area("Full Article Text", full_text, height=300)
 
-    # ── 6) AI-GENERATED CCAT SCORING ────────────────────────────────────────────
-    st.header("🤖 AI-Generated CCAT Scores")
+    st.header("📝 Manual CCAT Scoring")
     scores = {}
-    explanations = {}
-
-    with st.spinner("Scoring all CCAT sections using gpt-3.5-turbo..."):
+    comments = {}
+    with st.form("ccat_form"):
         for domain in ccat_domains:
-            prompt = (
-                f"You are a research appraiser using the Crowe Critical Appraisal Tool (CCAT) v1.4.\n"
-                f"Based on the full article text below, appraise the '{domain}' domain.\n\n"
-                f"Instructions: {ccat_prompts[domain]}\n\n"
-                f"Article Text:\n{full_text}\n\n"
-                f"Return in this format:\n"
-                f"Score: X  (where X is an integer from 0 to 5)\n"
-                f"Explanation: <two-to-three-sentence rationale>"
-            )
-
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
-            )
-            result = response.choices[0].message.content.strip()
-
-            try:
-                score_line, explanation_line = result.split("\n", 1)
-                score = int(score_line.replace("Score:", "").strip())
-                explanation = explanation_line.replace("Explanation:", "").strip()
-            except:
-                score = 0
-                explanation = "⚠️ GPT response formatting issue."
-
-            scores[domain] = score
-            explanations[domain] = explanation
-
-    # ── 7) DISPLAY RESULTS & DOWNLOAD ────────────────────────────────────────
-    df = pd.DataFrame({
-        "Domain": ccat_domains,
-        "Score (0–5)": [scores[d] for d in ccat_domains],
-        "Explanation": [explanations[d] for d in ccat_domains]
-    })
-
-    total_score = sum(scores.values())
-    percent_score = round((total_score / 40) * 100)
-
-    st.dataframe(df, use_container_width=True)
-    st.markdown(f"### ✅ Total Score: {total_score}/40  📊 Validity: {percent_score}%")
-
-    csv = df.to_csv(index=False)
-    st.download_button(
-        "⬇️ Download Appraisal as CSV",
-        data=csv,
-        file_name="ccat_appraisal.csv",
-        mime="text/csv"
-    )
-
-    # ── 8) “Appraise Another Article” BUTTON ───────────────────────────────
-    st.markdown("---")
-    if st.button("🔁 Appraise Another Article"):
-        st.experimental_rerun()
+            st.subheader(f"{domain}")
+            st.write(ccat_instructions[domain])
+            scores[domain] = st.slider(f"Score for {domain}", 0, 5, 0, key=domain)
+            comments[domain] = st.text_area(f"Comments on {domain}", key=f"{domain}_comment")
+        submitted = st.form_submit_button("✅ Submit Scores")
+    if submitted:
+        df = pd.DataFrame({
+            "Domain": ccat_domains,
+            "Score (0–5)": [scores[d] for d in ccat_domains],
+            "Comments": [comments[d] for d in ccat_domains]
+        })
+        total_score = sum(scores.values())
+        max_score = len(ccat_domains) * 5
+        percent = round((total_score / max_score) * 100, 2)
+        st.markdown("---")
+        st.subheader("📊 Appraisal Summary")
+        st.dataframe(df, use_container_width=True)
+        st.metric(label="Total Score", value=f"{total_score} / {max_score}")
+        st.metric(label="Percent Score", value=f"{percent}%")
+        csv = df.to_csv(index=False)
+        st.download_button("⬇️ Download Results as CSV", csv, file_name="ccat_appraisal.csv", mime="text/csv")
+        st.markdown("---")
+        if st.button("🔁 Appraise Another Article"):
+            st.experimental_rerun()
