@@ -3,28 +3,30 @@ import fitz  # PyMuPDF
 import pandas as pd
 import openai
 
-# ——— DEBUG: Confirming that the secret is loaded ———
+# ── 1) STREAMLIT PAGE CONFIG (MUST BE FIRST) ─────────────────────────────────
+st.set_page_config(
+    page_title="CCAT Auto-Appraiser",
+    layout="wide"
+)
+
+# ── 2) DEBUG: Confirm the secret is loaded ─────────────────────────────────
+# (Once confirmed, you can delete these lines.)
 if "OPENAI_API_KEY" not in st.secrets:
     st.error("❌ OPENAI_API_KEY not found in secrets.toml!")
     st.stop()
 else:
     st.success("🔐 OPENAI key loaded successfully.")
-# ——————————————————————————————————————————————   
 
-# ── STREAMLIT PAGE CONFIG ──────────────────────────────────────────────────
-st.set_page_config(
-    page_title="CCAT Auto-Appraiser",
-    layout="wide"
-)
-st.title("📚 CCAT Critical Appraisal Tool (v1.4) Auto-Appraiser")
-st.markdown(
-    "Upload a journal article PDF. GPT-4 will analyze it and auto-score each CCAT v1.4 domain."
-)
-
-# ── INITIALIZE OPENAI (v0.27.0) ───────────────────────────────────────────────
+# ── 3) INITIALIZE OPENAI AFTER DEBUG ─────────────────────────────────────────
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-# ── CCAT DOMAINS + PROMPTS ────────────────────────────────────────────────────
+# ── 4) PAGE TITLE & DESCRIPTION ─────────────────────────────────────────────
+st.title("📚 CCAT Critical Appraisal Tool (v1.4) Auto-Appraiser")
+st.markdown(
+    "Upload a journal article PDF below. GPT-4 will read it and automatically score each CCAT v1.4 domain."
+)
+
+# ── 5) CCAT DOMAINS & PROMPTS ─────────────────────────────────────────────────
 ccat_domains = [
     "Preliminaries",
     "Introduction",
@@ -70,20 +72,20 @@ ccat_prompts = {
     )
 }
 
-# ── PDF UPLOAD WIDGET ─────────────────────────────────────────────────────────
+# ── 6) PDF UPLOADER ────────────────────────────────────────────────────────────
 uploaded_file = st.file_uploader("📄 Upload a PDF file", type=["pdf"])
 
 if uploaded_file:
-    # Extract text from the uploaded PDF
+    # Extract full text from the PDF
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     full_text = "\n".join([page.get_text() for page in doc])
     st.success("✅ PDF uploaded and text extracted.")
 
-    # Show the extracted text if user wants to peek
+    # Optional: Let the user view the extracted text
     with st.expander("📖 View Extracted Article Text"):
-        st.text_area("Full Article Text", full_text, height=300)
+        st.text_area("Full Article Text", value=full_text, height=300)
 
-    # ── AI-GENERATED CCAT SCORING ──────────────────────────────────────────────
+    # ── 7) AI-GENERATED CCAT SCORING ──────────────────────────────────────────
     st.header("🤖 AI-Generated CCAT Scores")
     scores = {}
     explanations = {}
@@ -100,7 +102,7 @@ if uploaded_file:
                 f"Explanation: <two-to-three-sentence rationale>"
             )
 
-            # Call OpenAI (v0.27.0) with ChatCompletion.create
+            # Call OpenAI ChatCompletion (v0.27.0 syntax)
             response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[{"role": "user", "content": prompt}],
@@ -108,7 +110,7 @@ if uploaded_file:
             )
             result = response.choices[0].message.content.strip()
 
-            # Parse the “Score: X” and “Explanation: …”
+            # Parse the lines "Score: X" and "Explanation: …"
             try:
                 score_line, explanation_line = result.split("\n", 1)
                 score = int(score_line.replace("Score:", "").strip())
@@ -120,21 +122,19 @@ if uploaded_file:
             scores[domain] = score
             explanations[domain] = explanation
 
-    # Create a DataFrame to display all domain scores & explanations
+    # ── 8) DISPLAY RESULTS & DOWNLOAD ─────────────────────────────────────────
     df = pd.DataFrame({
         "Domain": ccat_domains,
         "Score (0–5)": [scores[d] for d in ccat_domains],
         "Explanation": [explanations[d] for d in ccat_domains]
     })
 
-    # Calculate total and percentage
     total_score = sum(scores.values())
-    percent_score = round((total_score / (len(ccat_domains) * 5)) * 100)
+    percent_score = round((total_score / 40) * 100)
 
     st.dataframe(df, use_container_width=True)
     st.markdown(f"### ✅ Total Score: {total_score}/40  📊 Validity: {percent_score}%")
 
-    # Provide CSV download
     csv = df.to_csv(index=False)
     st.download_button(
         "⬇️ Download Appraisal as CSV",
@@ -143,7 +143,7 @@ if uploaded_file:
         mime="text/csv"
     )
 
-    # “Appraise Another Article” button
+    # ── 9) “Appraise Another Article” BUTTON ──────────────────────────────────
     st.markdown("---")
     if st.button("🔁 Appraise Another Article"):
         st.experimental_rerun()
