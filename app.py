@@ -62,12 +62,14 @@ if uploaded_file:
                 f"Give:\n1. A score from 0 to 5\n2. A brief explanation (2–3 lines max)\n"
                 f"Format your response like:\nScore: X\nExplanation: ...\n"
             )
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
-            )
-            result = response.choices[0].message.content.strip()
+           client = openai.OpenAI()
+
+chat_response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.3
+)
+result = chat_response.choices[0].message.content.strip()
             try:
                 score_line, explanation_line = result.split("\n", 1)
                 score = int(score_line.replace("Score:", "").strip())
