@@ -1,7 +1,7 @@
 import streamlit as st
 import fitz  # PyMuPDF
 import pandas as pd
-import openai
+from openai import OpenAI
 import os
 
 # Set up the page
