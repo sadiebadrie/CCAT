@@ -3,6 +3,14 @@ import fitz  # PyMuPDF
 import pandas as pd
 import openai
 
+# ——— DEBUG: Confirming that the secret is loaded ———
+if "OPENAI_API_KEY" not in st.secrets:
+    st.error("❌ OPENAI_API_KEY not found in secrets.toml!")
+    st.stop()
+else:
+    st.success("🔐 OPENAI key loaded successfully.")
+# ——————————————————————————————————————————————   
+
 # ── STREAMLIT PAGE CONFIG ──────────────────────────────────────────────────
 st.set_page_config(
     page_title="CCAT Auto-Appraiser",
