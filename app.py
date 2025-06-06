@@ -1,7 +1,7 @@
 import streamlit as st
 import fitz  # PyMuPDF
 import pandas as pd
-from openai import OpenAI
+import openai
 
 # Set up Streamlit page
 st.set_page_config(page_title="CCAT Auto-Appraiser", layout="wide")
@@ -9,7 +9,7 @@ st.title("📚 CCAT Critical Appraisal Tool (v1.4) Auto-Appraiser")
 st.markdown("Upload a journal article PDF. GPT-4 will analyze it and auto-score each CCAT v1.4 domain.")
 
 # Initialize OpenAI
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # CCAT domains
 ccat_domains = [
@@ -61,7 +61,7 @@ if uploaded_file:
                 f"Return in the format:\nScore: X\nExplanation: ..."
             )
 
-            response = client.chat.completions.create(
+           response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3
